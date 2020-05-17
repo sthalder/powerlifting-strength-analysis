@@ -1,0 +1,558 @@
+---
+title: "It's not how much you lift, but how well you lift it!"
+author: "Soumya Halder"
+date: "12/02/2019"
+output: html_document
+---
+
+
+# Powerlifting Strength Analysis {.tabset .tabset-fade}
+
+## Executive Summary
+
+**Problem Statement:** The main objective of this analysis is to identify major factors which influences an individual's ability to do [Powerlifting](https://en.wikipedia.org/wiki/Powerlifting). As a sport, an individual gets 3 attempts on three lifts: squat, bench press and deadlift. There are many championships which take place around the world all along the year. All these competitions may have different age, weight and equipment categories; but the burning question every person debate, either as an audience or a powerlifter is how much weight will be lifted successfully by every player? By the end of this analysis, fans of the sport will have some inkling about their favorite player's ability. Also, the players themselves can understand their strengths and weaknesses; and plan to perform better in future competitions.
+
+As a powerlifter trains throughout their career, there are many factors which keep varying both internally and externally. We will deep dive into some of these to better understand and predict their lifting ability. We will perform separate analysis for male and female. The data available of players has age groups starting from early teens to late 70s. Along with it, we have corresponding bodyweights for players in those competitions. We also have the maximum lift data by players in their respective division i.e. best squat, bench press and deadlift.
+
+**Approach:** Initially, we observe the overall trend of average weights lifted to understand if there is any increase in overall strength. Post that, the EDA is around understanding the effect of age, bodyweight and equipment across a player's strength in performing the three lifts. Simultaneously, linear regression model is built to predict a player's lift. Also, the data was present for players where they failed to lift the required weight, we could have performed analysis on it but the data available was very less. This can be done in the future when more data becomes available.
+
+**Findings & Insights:**
+
+* Men reach their peak strength at the age of 20 and maintain it till around age 40
+* Women too reach their peak strength at age 20, but unlike men they maintain it for a longer period(approximately till mid 40s)
+* As per the regression model, men tend to lose their lifting strength by 0.5% every 1 year and gain 0.6 - 0.7% with every kg unit increase in bodyweight. For eg. if the total weight lifted by a man is 500 kgs, next year keeping all other factors constant, his total lift strength will drop by 0.5% i.e. it will become 497.5 kgs
+* As per the regression model, women tend to lose their lifting strength by 0.2% every 1 year and gain 0.9% with every kg unit increase in bodyweight. For eg. if the total weight lifted by a woman is 500 kgs, with an unit increase in bodyweight keeping all other factors constant, her total lift strength will increase by 0.9% i.e. it will become 504.5 kgs
+* Therefore, the model confirms that the downward trend in strength for women occurs at a slower rate then men
+* Both men and women have shown an increase in the average bench press weight lifted, while there's not much of a change in squat and deadlift
+* Single-ply equipment provides a huge boost to both genders especially for squat and bench press. This boost is comparatively very less for deadlift
+
+## Packages Required
+
+For analysis, most of the packages used will be base R for data cleaning, manipulation and analyzing. There are some other packages which will be used like **readr**, **dplyr**, **ggplot2**, **plotly**, **broom**, **car** and **DT**. Users must install **(install.packages("package_name"))** and **load** these packages prior to the analysis.
+
+Below is how to load above mentioned packages along with their short description:
+
+```{r package, echo=T, results='hide', message=FALSE}
+# Loading all the packages required to perform the analysis
+library(readr)        # Reading CSV file
+library(dplyr)        # Majorly used for data cleaning and manipulation 
+library(ggplot2)      # For creating better visualization
+library(broom)        # Turns output of built in R functions to tidy data frames
+library(car)          # Contains multiple functions to analyze regression output
+library(DT)           # Display data frames with better visualization in HTML
+library(lubridate)    # Extract date parts from date column
+library(dvmisc)       # To get MSE of linear model
+```
+
+
+## Data Preparation
+### This section provides a walkthrough of the data cleaning journey and making it analysis ready by building a Master Dataset{.tabset .tabset-fade}
+
+#### Data Dictionary
+
+The data is obtained from [Open Powerlifting](https://openpowerlifting.org/data). It is a project which aims on creating and providing an open archive of the world's powerlifting data. There is also a [Github Repository](https://gitlab.com/openpowerlifting/opl-data), where people can contribute to the project. There have been multiple projects undertaken using this data to understand how powerlifting has evolved over the years.
+
+The subset of above data which contains 16 variables can be obtained [here](https://github.com/rfordatascience/tidytuesday/tree/master/data/2019/2019-10-08). Below is the data dictionary of all variables:
+
+```{r DD, echo=FALSE}
+# Reading and visualizing the data dictionary data frame
+pl_dd <- read.csv("ipf_dd.csv")
+datatable(pl_dd)
+```
+
+#### Data Cleaning
+
+Below are the steps for building Master Dataset
+
+1. **Importing and initial checks:** We import the data into R and perform some initial checks. The dimension of dataset is 41,152 observations with 16 variables. While checking for the structure, it is found that all variables have been assigned the appropriate data type and hence no modification is needed. Since all the weight columns are in kg, it will be better to remove the suffix _kg. At an overall level, there are no signs of any duplicates. The main variables of interest for the analysis here are:
+* equipment
+* age
+* age_class
+* bodyweight
+* weight_class
+* best3squat
+* best3bench
+* best3deadlift
+* date
+
+In the following steps, each of the above variables will be operated separately.
+
+```{r data_import, results='hide', message=FALSE}
+# Importing CSV file
+pl_data <- read_csv("ipf_lifts.csv")
+
+# Display the data
+head(pl_data)
+
+# There are 41,152 observations with 16 variables
+dim(pl_data)
+
+# Analysing the structure of the data set
+str(pl_data)
+
+# Verifying if names are assigned properly
+names(pl_data)
+
+# Since all the weights are in kg, the suffix _kg can be removed
+pl_data <- rename(pl_data, 
+                  bodyweight = bodyweight_kg, 
+                  weight_class = weight_class_kg,
+                  best3squat = best3squat_kg,
+                  best3bench = best3bench_kg,
+                  best3deadlift = best3deadlift_kg)
+
+# Checking duplicates at an overall level
+pl_data <- unique(pl_data)
+
+```
+
+2. **Missing Value Treatment:** There are very high concentration of NAs in many variables. The reason for NAs is specified in data dictionary. For NAs in the 3 lift variables, it is due to a player performing only one lift. In such cases, the remaining 2 variables may contain NAs. We remove 1 observation which contains NA in *weight_class* since it won't hinder the analysis. Also, we observe 187 observations with NA in *bodyweight* which are spread across 6 different weight classes. Imputing the NA might distort our data and since these make up only 0.45% of the data, they can be removed. The remaining variables should not be operated for NAs, since the concentration is quite high. In the future, we might operate on these NAs based on analysis, but at this stage removing or imputing them may affect the data health.
+
+```{r missing_value, message=FALSE, results='hide'}
+# Checking NA values
+colSums(is.na(pl_data))
+# There are many NAs spread across columns which can be due to valid/invalid reasons
+
+# There's only 1 NA value in weight_class_kg which can be removed as it won't hinder our analysis
+pl_data <- filter(pl_data, !is.na(pl_data$weight_class))
+colSums(is.na(pl_data))
+
+# Operating NAs in bodyweight_kg
+pl_data_bw_check <- 
+  pl_data %>% 
+  filter(is.na(bodyweight)) %>% 
+  select(bodyweight, weight_class)
+
+# There are only 187 rows with NA
+# Let’s see if we can impute this NA values with weight_class_kg variable
+unique(pl_data_bw_check$weight_class)
+
+# The NAs are randomly scattered 6 classes. It won't make sense to impute these values since these are only 187 rows(0.45%) of the data. Hence, we can safely remove them
+pl_data <- filter(pl_data, !is.na(pl_data$bodyweight))
+colSums(is.na(pl_data))
+
+# The remaining columns have high NA concentration, hence removing/imputing them might disrupt our analysis. Hence, we won't remove any other observation at this stage
+```
+
+
+3. **Unique values:** We observe that the federation variable has only one value throughout, hence it can be removed. Also while operating for unique values in each variable, there's one value in *age_class* which is incorrect (*80-999*). This might be a data input error and we fix it to *80-99*. The remaining columns have proper data and there is no need to make any changes.
+
+```{r unique, message=FALSE, results='hide'}
+# Unique values in character columns
+unique(pl_data$sex)
+unique(pl_data$event)
+unique(pl_data$equipment)
+unique(pl_data$division)
+unique(pl_data$place)
+unique(pl_data$federation)
+
+# Since federation has only one unique value this variable can be removed
+pl_data <- select(pl_data, -federation)
+
+unique(pl_data$meet_name)
+
+unique(pl_data$age_class)
+
+# One class is incorrectly defined 80-999. Hence, correcting it
+pl_data <- mutate(pl_data, age_class = ifelse(age_class == "80-999", "80-99", age_class))
+
+unique(pl_data$age_class)
+unique(pl_data$weight_class)
+```
+
+4. **Outlier treatment:** We perform outlier treatment for all the numeric columns. The results for each step are commented in code chunks. For *age* and *bodyweight*, there were less than 1% of outliers present in the dataset. It is very less likely that players aged 79+ or those weighing 153+ kgs will compete in championships. This is also evident from the smaller number of such players present in the dataset, hence removing these observations won't create any hurdle. Also, we observe negative values in the 3 lift variables. Though these values are genuine, where the player failed to lift the required weight; we can't perform any analysis on them due to their extremely low concentration. There we remove these observations as well. Post eliminating negative values, there are very few outliers in *best3squat* and *best3bench*; however, we'll keep them as it is and operate on them if required during EDA. This is because unlike age and bodyweight, these are all dependent variables for our analysis. For *best3deadlift*, there are no outliers present.
+
+```{r outlier_1, message=FALSE, results='hide', fig.show='hide'}
+# This will be performed on all numeric variables
+
+## Age
+boxplot(pl_data$age)
+
+# The minimum age value of outlier is 79
+out_age_check <- filter((pl_data %>% 
+  group_by(age_class) %>% 
+  summarize(count = sum(age > 79, na.rm = T))), count > 0)
+
+sum(out_age_check$count)      # 55
+
+# There are 55 outlier observations with age > 79
+# This is again only 0.1% of our data and also heuristically we can remove these observations
+# Since very few people aged 79+ participate in competitions
+
+pl_data <- filter(pl_data, age < 79 | is.na(age))
+```
+
+```{r outlier_2, message=FALSE, results='hide', fig.show='hide'}
+## Bodyweight
+boxplot(pl_data$bodyweight)
+
+out_bw_check <- filter((pl_data %>% 
+                          group_by(weight_class) %>% 
+                          summarize(count = sum(bodyweight > 153.27, na.rm = T))), count > 0)
+
+sum(out_bw_check$count)              # 4-9
+
+# There are 409 observations with bodyweights > 153.27
+# Which is less than 1% of the data. We can make safe assumptions of not many powerlifters will have such high weights
+
+pl_data <- filter(pl_data, bodyweight < 153.27 | is.na(bodyweight))
+```
+
+```{r outlier_3, message=FALSE, results='hide', fig.show='hide'}
+## best3squat
+boxplot(pl_data$best3squat)
+
+# There are negative values which needs to be filtered
+out_bs_check <- filter((pl_data %>% 
+                          summarize(count = sum(best3squat < 0, na.rm = T))), count > 0)
+
+pl_data <- filter(pl_data, best3squat > 0 | is.na(best3squat))
+```
+
+```{r outlier_4, message=FALSE, results='hide', fig.show='hide'}
+## best3bench
+boxplot(pl_data$best3bench)
+
+# There are negative values which needs to be filtered
+
+out_bb_check <- filter((pl_data %>% 
+                          summarize(count = sum(best3bench < 0, na.rm = T))), count > 0)
+
+pl_data <- filter(pl_data, best3bench > 0 | is.na(best3bench))
+```
+
+```{r outlier_5, message=FALSE, results='hide', fig.show='hide'}
+## best3deadlift
+boxplot(pl_data$best3deadlift)
+
+# There are negative values which needs to be filtered
+out_bd_check <- filter((pl_data %>% 
+                          summarize(count = sum(best3deadlift < 0, na.rm = T))), count > 0)
+
+pl_data <- filter(pl_data, best3deadlift > 0 | is.na(best3deadlift))
+```
+
+
+5. **Final Dataset:** After all the cleaning and manipulation, we can remove certain variables like *division*, *place* and *meet_name*, which are not needed for EDA. Removing them won't have any effect on the level of data. Hence, we get our final dataset. Refer to the next section, to get a preview of final dataset.
+
+```{r mds, message=FALSE, results='hide'}
+# Removing 3 columns as it won't be needed in our analysis
+pl_mds <- select(pl_data, -c(division, place, meet_name))
+
+# Reordering the columns
+pl_mds <- pl_mds[, c(1,2,3,12,4,5,6,7,8,9,10,11)]
+```
+
+
+#### Data Preview
+
+Here's a glimpse of the Master Dataset:
+
+```{r preview, message=FALSE, echo=FALSE}
+datatable(head(pl_mds[!is.na(pl_mds$age),], n = 50))
+```
+
+
+## Exploratory Data Analysis
+### {.tabset .tabset-fade}
+
+#### Time
+
+* First, we create 2 ADSs (analytical datasets) from our master dataset by filtering male and female. It is observed that there is a small percentage of outlier present in the age column for females and hence we remove them. There is no outlier for age in male dataset. However, for bodyweight, there are outliers in both datasets which can hinder the analysis by skewing data. Also, this is a small percentage and hence we remove them.
+
+```{r mf_subsets, message=FALSE, warning=FALSE, results="hide", fig.show='hide'}
+# Creating subsets of final data by gender
+pl_mds_m <- filter(pl_mds, sex == "M")
+pl_mds_f <- filter(pl_mds, sex == "F")
+
+age_ol_f <- boxplot(pl_mds_f$age)$out
+
+# Removing outliers from age as it is an extremely small percentage
+pl_mds_f <- filter(pl_mds_f, age < min(age_ol_f))
+
+# There are some outliers in bodyweight which can hinder the analysis. Hence, removing them
+bw_ol_m <- boxplot(pl_mds_m$bodyweight)$out
+pl_mds_m <- filter(pl_mds_m, bodyweight < min(bw_ol_m))
+
+bw_ol_f <- boxplot(pl_mds_f$bodyweight)$out
+pl_mds_f <- filter(pl_mds_f, bodyweight < min(bw_ol_f))
+```
+
+* Let’s try to find if the average weightlifting ability has changed over the period. This is done by plotting the trend of average weight lifted in every year. For males, it is evident that there is consistent increase in bench press ability especially since 1990. However, there isn't much of a change in the other 2 lifts. Overall it has remained constant throughout the years. At this stage, it looks like males may have grown stronger over the years, but it cannot be said with utmost confidence yet. The total weight lifted for squats and deadlift is very high than bench press, since more leg muscles are used in them.
+
+```{r time_m, warning=FALSE, message=FALSE, fig.align='center'}
+# Adding a variable which extracts year from date
+pl_mds_m <- mutate(pl_mds_m, year = year(date))
+
+# Creating a dataframe which contains average lifts by year
+year_avg_m <- 
+  pl_mds_m %>% 
+  group_by(year) %>% 
+  summarize(avg_bs = mean(best3squat, na.rm = T),
+            avg_bb = mean(best3bench, na.rm = T),
+            avg_bd = mean(best3deadlift, na.rm = T))
+
+# Plotting the trend of 3 lifts on a yearly basis
+year_avg_m %>% 
+  ggplot(aes(x = year)) + 
+  geom_line(aes(y = avg_bs, color = "Squat")) +
+  geom_line(aes(y = avg_bb, color = "Bench press")) +
+  geom_line(aes(y = avg_bd, color = "Deadlift")) +
+  xlab("Dates") +
+  ylab("Average weight lifted") +
+  scale_colour_manual(name = "Lift type", breaks = c("Deadlift", "Squat", "Bench press"),
+                    values = c("green", "blue", "red")) +
+  ylim(140, 275) +
+  ggtitle("Average lifts over time - Male")
+
+```
+
+* A similar trend can be observed for females. The bench press line shows some progress whereas the other 2 remain almost stable. Therefore, an overall trend indicate there might be certain increase in strength for both males and females over years, but we need to perform granular analysis to reach some conclusion.
+
+```{r time_f, warning=FALSE, message=FALSE, fig.align='center'}
+# Adding a variable which extracts year from date
+pl_mds_f <- mutate(pl_mds_f, year = year(date))
+
+# Creating a dataframe which contains average lifts by year
+year_avg_f <- 
+  pl_mds_f %>% 
+  group_by(year) %>% 
+  summarize(avg_bs = mean(best3squat, na.rm = T),
+            avg_bb = mean(best3bench, na.rm = T),
+            avg_bd = mean(best3deadlift, na.rm = T))
+
+# Plotting the trend of 3 lifts on a yearly basis
+year_avg_f %>% 
+  ggplot(aes(x = year)) + 
+  geom_line(aes(y = avg_bs, color = "Squat")) +
+  geom_line(aes(y = avg_bb, color = "Bench press")) +
+  geom_line(aes(y = avg_bd, color = "Deadlift")) +
+  xlab("Dates") +
+  ylab("Average weight lifted") +
+  scale_colour_manual(name = "Lift type", breaks = c("Deadlift", "Squat", "Bench press"),
+                    values = c("green", "blue", "red")) +
+  ggtitle("Average lifts over time - Female")
+```
+
+#### Age
+After observing the trend at an overall level throughout these years, we'll try to see how age affects an individual's lifting ability for all 3 lifts.
+
+**Male**
+
+* **Squat:** The below charts display the lifting ability of individuals with their age for squats. There are 3 equipment types and major observations are present for *raw* and *single-ply*. It is quite evident that men reach their peak strength around the age of 20 and maintain it till approximately the age of 40. Post that, it seems to follow a downward trend. The strength with *single-ply* equipment is more than the other two, as most people lift approximately *75 kgs* more with it.
+
+```{r age_squat_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = age, y = best3squat)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Squat lifts in kg") +
+  ggtitle("Effect of age on squat weights")
+
+```
+
+* **Bench press:** As observed for squats, the bench press follows a similar pattern. There is an obvious peak in the age range of *20* to *40*. And this is true for equipment types *raw* and *single-ply*. Also, the strength for men while using *single-ply* is approximately *100 kgs* more in terms of maximum lift. The downward trend seems to follow around the age of 45 here unlike squats.
+
+```{r age_bp_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = age, y = best3bench)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Bench press lifts in kg") +
+  ggtitle("Effect of age on bench press weights")
+
+```
+
+* **Deadlift:** This chart can confirm that the peak stage for men starts at the age of 20 and continues till 40. Unlike squat and bench press, the difference in strength for equipment used is very less.
+
+```{r age_deadlift_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = age, y = best3deadlift)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Deadlift weight in kg") +
+  ggtitle("Effect of age on deadlift weights")
+
+```
+
+
+**Female**
+
+* **Squat:** There are only 2 equipment types data available for women. Again, there is an obvious peak at the age of 20. But unlike men, this peak continues for some time even after the age of 40. Let's see if the other 2 lifts also show similar trends.
+
+```{r age_squat_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = age, y = best3squat)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Squat lifts in kg") +
+  ggtitle("Effect of age on squat weights")
+```
+
+* **Bench press:** Like squat, the peak continues for females till their mid-40s. And it is very clear by all above graphs that *single-ply* equipment boosts the strength in both genders.
+
+```{r age_bp_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = age, y = best3bench)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Bench press lifts in kg") +
+  ggtitle("Effect of age on bench press weights")
+```
+
+* **Deadlift:** This chart shows a dip in strength post the age of 40 and just like men the difference between equipment types is very less. 
+
+```{r age_deadlift_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = age, y = best3deadlift)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Age") +
+  ylab("Deadlift weight in kg") +
+  ggtitle("Effect of age on deadlift weights")
+```
+
+From the above charts, it looks like women tend to maintain their peak strength for longer periods than men. Also, the equipment type used is a major factor in an individual's lifting ability. It's not a heavy influencer for deadlift but provides high boost in squat and bench press. Let's now see how bodyweight affects the lifting ability.
+
+#### Bodyweight
+We'll measure the overall effect of bodyweight on the lifting abilities.
+
+**Male**
+
+There is a very noticeable relation between bodyweight and the lifting ability of individuals. It shows as bodyweight increases, the strength and lifting ability increases. This can be seen in the below charts for all 3 lifts.
+
+```{r bw_squat_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = bodyweight, y = best3squat)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Squat lifts in kg") +
+  ggtitle("Effect of bodyweight on squat weights")
+```
+
+```{r bw_bp_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = bodyweight, y = best3bench)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Benchpress lifts in kg") +
+  ggtitle("Effect of bodyweight on bench press weights")
+```
+
+```{r bw_deadlift_m, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_m %>% 
+  ggplot(aes(x = bodyweight, y = best3deadlift)) + 
+  geom_point(colour = "blue3") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Deadlift weight in kg") +
+  ggtitle("Effect of bodyweight on deadlift weights")
+```
+
+**Female**
+
+It's not a surprise that we observe similar trend as men for bodyweight here. It's crystal clear that bodyweight holds a positive relation with strength.
+
+```{r bw_squat_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = bodyweight, y = best3squat)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Squat lifts in kg") +
+  ggtitle("Effect of bodyweight on squat weights")
+```
+
+```{r bw_bp_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = bodyweight, y = best3bench)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Bench press weight in kg") +
+  ggtitle("Effect of bodyweight on bench press weights")
+```
+
+```{r bw_deadlift_f, warning=FALSE, message=FALSE, fig.align='center'}
+pl_mds_f %>% 
+  ggplot(aes(x = bodyweight, y = best3deadlift)) + 
+  geom_point(colour = "darkorange1") + 
+  facet_wrap(~ equipment, nrow = 1) +
+  xlab("Bodyweight") +
+  ylab("Deadlift weight in kg") +
+  ggtitle("Effect of bodyweight on deadlift weights")
+```
+
+Therefore, going by the analysis with age and bodyweight, after a certain amount of age there is a decrease in lifting strength while more bodyweight can be associated with more lifting power. We'll try to derive a clear relation for strength with age and bodyweight by linear regression.
+
+#### Linear Regression
+
+After the initial analysis, let's try to build a regression model which can predict the effect of age and bodyweight for men and women. The model will be built at an overall level and for that only *SBD* events will be filtered, since most of them will have values for all 3 lifts. An additional metric *total_lift* which is the sum of 3 lifts will be created for both men and women dataset.
+
+**Male**
+
+The initial model was built with *total_lift* as the response variable, but there were multiple violations observed during assessment of model performance. Therefore, a log transformation is applied on *total_lift* to make the data more normal, rather more symmetric. This helped us achieving better model performance. The coefficient values are mentioned below in model output. The final regression equation is,
+<br>
+**log(total_lift) = 5.95 - 0.005038(age) + 0.006955(bodyweight) + 0.1152(single-ply) + 0.1255(wraps)**
+<br>
+If we predict the lifting ability based on equipment type raw then the other two equipment coefficient terms become 0. If prediction is done for only single-ply, then wraps term become zero and vice versa.
+As per the equation, if all other terms are constant then for every unit increase in age, the total_lift will approximately decrease by (0.005038 * 100)%. This is approximately *0.5%*. Similarly, for every unit increase in bodyweight, the lifting strength in men increases by approximately *0.6 to 0.7%*. 
+For eg. if the total weight lifted by a man is 500 kgs, next year keeping all other factors constant, his total lift strength will drop by 0.5% i.e. it will become 497.5 kgs. The respective age and bodyweight values along with equipment type can be used to predict an individual's total lifting ability.
+
+```{r lm_ds_m, warning=FALSE, message=FALSE}
+# Filtering out records which has all 3 lifts
+pl_mds_msbd <- filter(pl_mds_m, event == "SBD")
+pl_mds_msbd <- mutate( pl_mds_msbd, total_lift = best3squat + best3bench + best3deadlift)
+```
+
+```{r lm_m, warning=FALSE, message=FALSE}
+# Fitting linear model on log(total_lift)
+fit_pl_mds_msbd <- lm(log(total_lift) ~ age + bodyweight + equipment,  pl_mds_msbd)
+summary(fit_pl_mds_msbd)
+get_mse(fit_pl_mds_msbd)                # 0.0264
+sqrt(get_mse(fit_pl_mds_msbd))          # 0.1626
+vif(fit_pl_mds_msbd)                    # ~1. Hence, no multicollinearity
+```
+
+**Female**
+
+Like the model for men, there were multiple violations observed with total_lift during model assessment. Therefore, the model is built on log transformation of *total_lift* to make the data more more symmetric. The coefficient values are mentioned below in model output. The final regression equation is,
+<br>
+**log(total_lift) = 5.327 - 0.00284(age) + 0.00934(bodyweight) + 0.1579(single-ply)**
+<br>
+If we predict the lifting ability based on equipment type raw then the other two equipment coefficient terms become 0. If prediction is done for only single-ply, then wraps term become zero and vice versa.
+As per the equation, if all other terms are constant then for every unit increase in age, the total_lift will approximately decrease by (0.00284 * 100)%. This is approximately *0.2%*. Similarly, for every unit increase in bodyweight, the lifting strength in men increases by approximately *0.9%*. 
+For eg. if the total weight lifted by a woman is 500 kgs, with an unit increase in bodyweight keeping all other factors constant, her total lift strength will increase by 0.9% i.e. it will become 504.5 kgs. The respective age and bodyweight values along with equipment type can be used to predict an individual's total lifting ability.
+From these model results, some of our previous conclusions on age and bodyweight are confirmed. Men tend to lose their strength at a faster rate when compared to women.
+
+```{r lm_ds_f, warning=FALSE, message=FALSE}
+# Filtering out records which has all 3 lifts
+pl_mds_fsbd <- filter(pl_mds_f, event == "SBD")
+pl_mds_fsbd <- mutate( pl_mds_fsbd, total_lift = best3squat + best3bench + best3deadlift)
+```
+
+```{r lm_f, warning=FALSE, message=FALSE}
+# Fitting linear model on log(total_lift)
+fit_pl_mds_fsbd <- lm(log(total_lift) ~ age + bodyweight + equipment,  pl_mds_fsbd)
+summary(fit_pl_mds_fsbd)
+get_mse(fit_pl_mds_fsbd)               # 0.0352
+sqrt(get_mse(fit_pl_mds_fsbd))         # 0.1877
+vif(fit_pl_mds_fsbd)                   # ~1. Hence, no multicollinearity
+```
+
+
+## Next Steps
+
+Below are some of the next steps that can be taken to improve the model and analysis. It also includes some limitations from current analysis.
+
+* The regression model currently predicts the total lift that can be lifted by an individual i.e. sum of squat, bench press and deadlift
+* As a next phase, there can be multiple models built which can predict individual lifts
+* Also, the current model accuracy can also be improved by considering multiple interaction variables as predictors. I believe this can increase accuracy to the range of 65 - 70%
+* The overall age and bodyweight analysis which were done can be broken further into multiple age and bodyweight groups to understand its effect
