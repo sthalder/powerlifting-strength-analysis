@@ -1,2 +1,9 @@
-# powerlifting-strength-analysis
-The main objective of this analysis is to identify major factors which influences an individual’s ability to do Powerlifting
+# It’s not how much you lift, but how well you lift it!
+
+## Problem Statement
+The main objective of this analysis is to identify major factors which influences an individual’s ability to do Powerlifting. As a sport, an individual gets 3 attempts on three lifts: squat, bench press and deadlift. There are many championships which take place around the world all along the year. All these competitions may have different age, weight and equipment categories; but the burning question every person debate, either as an audience or a powerlifter is how much weight will be lifted successfully by every player? By the end of this analysis, fans of the sport will have some inkling about their favorite player’s ability. Also, the players themselves can understand their strengths and weaknesses; and plan to perform better in future competitions.
+
+As a powerlifter trains throughout their career, there are many factors which keep varying both internally and externally. We will deep dive into some of these to better understand and predict their lifting ability. We will perform separate analysis for male and female. The data available of players has age groups starting from early teens to late 70s. Along with it, we have corresponding bodyweights for players in those competitions. We also have the maximum lift data by players in their respective division i.e. best squat, bench press and deadlift.
+
+## Approach
+Initially, we observe the overall trend of average weights lifted to understand if there is any increase in overall strength. Post that, the EDA is around understanding the effect of age, bodyweight and equipment across a player’s strength in performing the three lifts. Simultaneously, linear regression model is built to predict a player’s lift. Also, the data was present for players where they failed to lift the required weight, we could have performed analysis on it but the data available was very less. This can be done in the future when more data becomes available.
